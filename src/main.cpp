@@ -10,23 +10,24 @@
 using namespace std;
 using Pool = ConnectionPool<RedisConnection>;
 
+// #define TEST_RENEWAL
+// #define TEST_RECURSIVE
 
 template<typename DistributedLock>
 void func(DistributedLock&& dlk) {
-    atomic<int> x = 0;
     auto routing = [&]() {
         auto conn = Singleton<Pool>::get_instance().get();
-        if(!conn) {
-            printf("get connection failed\n");
-            return;
-        }
+        assert(conn && "get connection failed!");
         auto c = conn->ctx();
         redisReply* reply;
         for(int i = 0; i < 50; ++i) {
             while(!dlk.try_lock()) {
                 usleep(100);
             }
-            for(int j = 0; j < 5; ++j) dlk.try_lock();
+
+#ifdef TEST_RECURSIVE
+            for(int j = 0; j < 5; ++j) dlk.try_unlock();
+#endif
 
             reply = static_cast<redisReply *>(redisCommand(c, "GET counter"));
             int cnt = stoi(reply->str);
@@ -37,8 +38,13 @@ void func(DistributedLock&& dlk) {
             reply = static_cast<redisReply *>(redisCommand(c, "SET counter %s", to_string(cnt).c_str()));
             printf("new counter: %s\n", reply->str);
             freeReplyObject(reply);
+#ifdef TEST_RENEWAL
+            sleep(120);
+#endif
 
+#ifdef TEST_RECURSIVE
             for(int j = 0; j < 5; ++j) dlk.unlock();
+#endif
             dlk.unlock();
         }
     };
