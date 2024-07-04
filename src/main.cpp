@@ -26,7 +26,7 @@ void func(DistributedLock&& dlk) {
             while(!dlk.try_lock()) {
                 usleep(100);
             }
-            // for(int j = 0; j < 5; ++j) dlk.try_lock();
+            for(int j = 0; j < 5; ++j) dlk.try_lock();
 
             reply = static_cast<redisReply *>(redisCommand(c, "GET counter"));
             int cnt = stoi(reply->str);
@@ -38,7 +38,7 @@ void func(DistributedLock&& dlk) {
             printf("new counter: %s\n", reply->str);
             freeReplyObject(reply);
 
-            // for(int j = 0; j < 5; ++j) dlk.unlock();
+            for(int j = 0; j < 5; ++j) dlk.unlock();
             dlk.unlock();
         }
     };

@@ -32,19 +32,19 @@ private:
 };
 
 void RedisDistributedLock::lock() {
-    try_lock(std::chrono::duration<size_t>(2147483647));
+    try_lock(second(2147483647));
 }
 
-bool RedisDistributedLock::try_lock(std::chrono::duration<size_t> timeout) {
+bool RedisDistributedLock::try_lock(second timeout) {
     auto conn = Singleton<RedisPool>::get_instance().get();
     assert(conn && "get connection failed when locking redis distributed lock!");
     auto c = conn->ctx();
     std::string cmd = "if redis.call('exists', KEYS[1]) == 0 or redis.call('hexists', KEYS[1], ARGV[1]) == 1 then "
-                      "redis.call('hincrby', KEYS[1], ARGV[1], 1) "
-                      "redis.call('expire', KEYS[1], ARGV[2]) "
-                      "return 1 "
+                          "redis.call('hincrby', KEYS[1], ARGV[1], 1) "
+                          "redis.call('expire', KEYS[1], ARGV[2]) "
+                          "return 1 "
                       "else "
-                      "return 0 "
+                          "return 0 "
                       "end";
 
     auto try_once = [this, &c, &cmd]() {
@@ -60,13 +60,15 @@ bool RedisDistributedLock::try_lock(std::chrono::duration<size_t> timeout) {
     // 条件变量比较尴尬，notify 时只有本进程的线程可以收到通知（其实，这样也还行？？？？？）
     // 至少需要尝试一次，否则当 timeout 是 0 时，永远不会成功。
     std::chrono::steady_clock::time_point abs =  std::chrono::steady_clock::now() + timeout;
+    std::string uuid = uuid_fake();
     do {
         if(try_once()) {
-            std::string uuid = uuid_fake();
-            if(!_timer) _timer = std::make_shared<Timer>([this, uuid]() { renewal(uuid); }, _expire * 1000 / 3);
+            // 一旦加锁成功，立刻启动定时续期线程（线程还不存在的前提下），递归加锁时，线程已存在无需再启动
+            if(!_timer) _timer = std::make_shared<Timer>([this, uuid]() {
+                renewal(uuid); },static_cast<milli_second>(_expire * 1000 / 3));
             return true;
         }
-        std::this_thread::sleep_for(std::chrono::duration<size_t, std::milli>(20));
+        std::this_thread::sleep_for(milli_second(30));
     } while(std::chrono::steady_clock::now() <= abs);
 
     return false;
@@ -78,16 +80,19 @@ void RedisDistributedLock::unlock() {
     auto c = conn->ctx();
 
     std::string cmd = "if redis.call('hexists', KEYS[1], ARGV[1]) == 0 then "
-                      "return nil "
+                          "return nil "
                       "elseif redis.call('hincrby', KEYS[1], ARGV[1], -1) == 0 then "
-                      "return redis.call('del', KEYS[1]) "
+                          "return redis.call('del', KEYS[1]) "
                       "else "
-                      "return 0 "
+                          "return 0 "
                       "end";
+
     redisReply* reply = static_cast<redisReply *>(
         redisCommand(c,"eval %s 1 %s %s", cmd.c_str(), _key.c_str(), uuid_fake().c_str()));
 
+    // 分布式锁不存在了，可能是被删除了，也可能是没续上期，都属于异常情况
     assert(reply->type != 4 && "distributed lock was deleted in a wrong way\n");
+    // 当分布式锁被删除时，终止定时续期线程，只是解递归锁时，线程不应终止
     if(reply->integer == 1) _timer = nullptr;
     freeReplyObject(reply);
 }
@@ -107,6 +112,7 @@ void RedisDistributedLock::renewal(const std::string& uuid) {
         redisCommand(c,"eval %s 1 %s %s %s", cmd.c_str(), _key.c_str(), uuid.c_str(),
                      std::to_string(_expire).c_str()));
 
+    // 续期失败
     assert(reply->integer == 1 && "renewal distributed lock failed\n");
     freeReplyObject(reply);
 }

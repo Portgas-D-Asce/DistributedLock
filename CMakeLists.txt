@@ -8,7 +8,8 @@ include_directories(/usr/local/include
         src/singleton
         src/distributed_lock
         src/factory
-        src/timer)
+        src/timer
+        src/common)
 
 link_directories(/usr/local/lib)
 

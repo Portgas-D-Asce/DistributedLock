@@ -5,6 +5,7 @@
 #include <memory>
 #include <condition_variable>
 #include <functional>
+#include "common.h"
 
 
 class Timer {
@@ -13,12 +14,19 @@ private:
     mutable std::condition_variable _cv;
     bool _stop;
     std::function<void()> _func;
-    size_t _milli;
+    milli_second _milli;
     std::shared_ptr<std::thread> _thread;
 public:
-    explicit Timer(std::function<void()> func,  size_t milli)
-        : _stop(false), _func(std::move(func)), _milli(milli) {
-        _thread = std::make_shared<std::thread>([this]() { routing(); });
+    explicit Timer(std::function<void()> func, milli_second milli) : _stop(false), _func(std::move(func)), _milli(milli) {
+        _thread = std::make_shared<std::thread>([this]() {
+            while(true) {
+                {
+                    std::unique_lock<std::mutex> uq(_mtx);
+                    if(_cv.wait_for(uq, _milli, [this]() { return _stop; })) break;
+                }
+                _func();
+            }
+        });
     }
 
     ~Timer() {
@@ -29,18 +37,6 @@ public:
         _cv.notify_one();
         if(_thread->joinable()) _thread->join();
     }
-private:
-    void routing() {
-        while(true) {
-            std::unique_lock<std::mutex> uq(_mtx);
-            if(_cv.wait_for(uq, static_cast<std::chrono::duration<size_t, std::milli>>(_milli),
-                            [this]() { return _stop; })) break;
-
-            _func();
-        }
-
-    }
-
 };
 
 
