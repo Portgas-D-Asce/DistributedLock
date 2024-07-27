@@ -1,18 +1,17 @@
-cmake_minimum_required(VERSION 3.26)
-project(DistributedLock)
+cmake_minimum_required(VERSION 3.20)
+
+project(distributed_lock VERSION 1.0.0)
 
 set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-include_directories(/usr/local/include
-        src/connection_pool
-        src/singleton
-        src/distributed_lock
-        src/factory
-        src/timer
-        src/common)
+include(cmake/base.cmake)
 
-link_directories(/usr/local/lib)
+add_subdirectory(src)
 
-add_executable(DistributedLock src/main.cpp)
+# add_subdirectory(example)
 
-target_link_libraries(DistributedLock hiredis)
+include(cmake/cmake.cmake)
+
+include(cmake/cpack.cmake)

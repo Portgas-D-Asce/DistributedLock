@@ -1,0 +1,13 @@
+
+[connection]
+host = "127.0.0.1"
+port = 6379
+db = "0"
+user = ""
+passwd = ""
+
+[connection_pool]
+mn = 32
+mx = 64
+limit = 128
+idle = 5000
