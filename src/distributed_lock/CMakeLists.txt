@@ -14,7 +14,6 @@ if (NOT connection_pool_FOUND)
 endif ()
 
 add_library(redis_lock SHARED)
-add_library(distributed_lock::redis_lock ALIAS redis_lock)
 
 target_sources(redis_lock
     PRIVATE
@@ -29,7 +28,7 @@ target_include_directories(redis_lock
 
 target_link_libraries(redis_lock
     PUBLIC
-    connection_pool::redis_pool
+    $<$<BOOL:${connection_pool_FOUND}>:connection_pool::>redis_pool
 )
 
 set_target_properties(redis_lock
