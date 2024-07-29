@@ -1,6 +1,7 @@
 #include <iostream>
 #include <cstdlib>
 #include <cassert>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #include "distributed_lock/redis_distributed_lock.h"
